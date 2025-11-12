@@ -97,7 +97,9 @@ public final class SFTPClient: Sendable {
             self.logger.trace("SFTP OUT: \(message.debugDescription)")
             //logger.trace("SFTP OUT: \(message.debugRawBytesRepresentation)")
 
-            self.responses.responses[requestId] = promise
+            self.channel.pipeline.addHandler(ProgressTrackingHandler({ progressed in
+                self.logger.debug("\(#function) :: 진행상태 = \(progressed)")
+            }))
             return self.channel.writeAndFlush(request.makeMessage()).flatMap {
                 promise.futureResult
             }
@@ -583,5 +585,29 @@ final class SFTPResponses: Sendable {
 
     deinit {
         close()
+    }
+}
+
+// MARK: - Progress Tracking -
+/// Progress Tracking Handler
+final class ProgressTrackingHandler: ChannelOutboundHandler {
+    typealias OutboundIn = ByteBuffer
+    typealias OutboundOut = ByteBuffer
+    
+    private var bytesProgressed: Int = 0
+    private let progressCallback: (Int) -> Void
+    
+    /// 초기화
+    init(_ progressCallback: @escaping (Int) -> Void) {
+        self.progressCallback = progressCallback
+    }
+    
+    func write(context: ChannelHandlerContext, data: NIOAny, promise: EventLoopPromise<Void>?) {
+        let buffer = unwrapOutboundIn(data)
+        bytesProgressed += buffer.readableBytes
+        // 진행상태 콜백 실행
+        progressCallback(bytesProgressed)
+        // data 를 context 에 생성
+        context.write(data, promise: promise)
     }
 }
