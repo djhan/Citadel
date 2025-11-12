@@ -173,6 +173,47 @@ public final class SFTPFile {
         return buffer
     }
     
+    /// Read a specific range of bytes from the file in chunks, with optional progress reporting.
+    ///
+    /// - Parameters:
+    ///   - from: The starting offset in the file to begin reading from (defaults to 0).
+    ///   - length: The total number of bytes to read.
+    ///   - chunkSize: The maximum number of bytes to read per chunk (defaults to 32,768).
+    ///   - progress: Optional closure called with the total number of bytes read after each chunk is read.
+    /// - Returns: ByteBuffer containing the requested range of file contents.
+    /// - Throws: SFTPError if the file handle is invalid or read fails.
+    ///
+    /// ## Example
+    /// ```swift
+    /// try await sftp.withFile(filePath: "test.txt", flags: .read) { file in
+    ///     let contents = try await file.readChunked(from: 0, length: 100_000, chunkSize: 16_384) { bytesRead in
+    ///         print("Read \(bytesRead) bytes so far")
+    ///     }
+    ///     print("Total bytes read:", contents.readableBytes)
+    /// }
+    /// ```
+    public func readChunked(from offset: UInt64 = 0, length: UInt64, chunkSize: UInt32 = 32_768, progress: ((Int) -> Void)? = nil) async throws -> ByteBuffer {
+        guard self.isActive else { throw SFTPError.fileHandleInvalid }
+        
+        var buffer = ByteBuffer()
+        var totalBytesRead = 0
+        
+        while UInt64(totalBytesRead) < length {
+            let bytesToRead = UInt32(min(UInt64(chunkSize), length - UInt64(totalBytesRead)))
+            let chunk = try await self.read(from: offset + UInt64(totalBytesRead), length: bytesToRead)
+            if chunk.readableBytes == 0 {
+                break
+            }
+            
+            var chunkVar = chunk
+            buffer.writeBuffer(&chunkVar)
+            totalBytesRead += chunk.readableBytes
+            progress?(totalBytesRead)
+        }
+        
+        return buffer
+    }
+    
     /// Write data to the file at the specified offset.
     ///
     /// - Parameters:
