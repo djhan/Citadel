@@ -97,6 +97,7 @@ public final class SFTPClient: Sendable {
             self.logger.trace("SFTP OUT: \(message.debugDescription)")
             //logger.trace("SFTP OUT: \(message.debugRawBytesRepresentation)")
 
+            self.responses.responses[requestId] = promise
             return self.channel.writeAndFlush(request.makeMessage()).flatMap {
                 promise.futureResult
             }
@@ -211,10 +212,10 @@ public final class SFTPClient: Sendable {
     ///     filePath: "test.txt",
     ///     flags: .read
     /// )
-    /// 
+    ///
     /// // Read entire contents
     /// let data = try await file.readToEnd()
-    /// 
+    ///
     /// // Don't forget to close
     /// try await file.close()
     /// ```
@@ -260,7 +261,7 @@ public final class SFTPClient: Sendable {
     /// ) { file in
     ///     try await file.readToEnd()
     /// }
-    /// 
+    ///
     /// // Write file contents
     /// try await sftp.withFile(
     ///     filePath: "new.txt",
@@ -298,7 +299,7 @@ public final class SFTPClient: Sendable {
     /// ```swift
     /// // Create simple directory
     /// try await sftp.createDirectory(atPath: "new_folder")
-    /// 
+    ///
     /// // Create with specific permissions
     /// try await sftp.createDirectory(
     ///     atPath: "private_folder",
@@ -406,7 +407,7 @@ public final class SFTPClient: Sendable {
     /// ```swift
     /// // Resolve current directory
     /// let pwd = try await sftp.getRealPath(atPath: ".")
-    /// 
+    ///
     /// // Resolve relative path
     /// let absolute = try await sftp.getRealPath(atPath: "../some/path")
     /// ```
@@ -438,11 +439,11 @@ extension SSHClient {
     /// ## Example
     /// ```swift
     /// let client = try await SSHClient(/* ... */)
-    /// 
+    ///
     /// try await client.withSFTP { sftp in
     ///     // List directory contents
     ///     let contents = try await sftp.listDirectory(atPath: "/home/user")
-    ///     
+    ///
     ///     // Read a file
     ///     try await sftp.withFile(filePath: "test.txt", flags: .read) { file in
     ///         let data = try await file.readToEnd()
@@ -476,10 +477,10 @@ extension SSHClient {
     /// ```swift
     /// let client = try await SSHClient(/* ... */)
     /// let sftp = try await client.openSFTP()
-    /// 
+    ///
     /// // Use SFTP client
     /// let contents = try await sftp.listDirectory(atPath: "/home/user")
-    /// 
+    ///
     /// // Remember to close when done
     /// try await sftp.close()
     /// ```
@@ -584,3 +585,5 @@ final class SFTPResponses: Sendable {
         close()
     }
 }
+
+// Progress tracking is now handled exclusively in the file transfer APIs.

@@ -116,14 +116,18 @@ public final class SFTPFile {
     
     /// Read all bytes in the file into a single in-memory buffer.
     ///
+    /// - Parameters:
+    ///   - progress: Optional closure called with the total number of bytes read after each chunk is read.
     /// - Returns: ByteBuffer containing the entire file contents
     /// - Throws: SFTPError if the file handle is invalid or read fails
     ///
     /// ## Example
     /// ```swift
     /// try await sftp.withFile(filePath: "test.txt", flags: .read) { file in
-    ///     // Read entire file
-    ///     let contents = try await file.readAll()
+    ///     // Read entire file with progress reporting
+    ///     let contents = try await file.readAll(progress: { bytesDownloaded in
+    ///         print("Downloaded \(bytesDownloaded) bytes")
+    ///     })
     ///     print("File size:", contents.readableBytes)
     /// 
     ///     // Convert to string if text file
@@ -132,7 +136,7 @@ public final class SFTPFile {
     ///     }
     /// }
     /// ```
-    public func readAll() async throws -> ByteBuffer {
+    public func readAll(progress: ((Int) -> Void)? = nil) async throws -> ByteBuffer {
         let attributes = try await self.readAttributes()
         
         var buffer = ByteBuffer()
@@ -151,12 +155,14 @@ public final class SFTPFile {
                     
                     readableBytes -= UInt64(data.readableBytes)
                     buffer.writeBuffer(&data)
+                    progress?(buffer.readableBytes)
                 }
             } else {
                 while var data = try await self.read(
                     from: numericCast(buffer.writerIndex)
                 ).nilIfUnreadable() {
                     buffer.writeBuffer(&data)
+                    progress?(buffer.readableBytes)
                 }
             }
         } catch let error as SFTPMessage.Status where error.errorCode == .eof {
@@ -172,6 +178,7 @@ public final class SFTPFile {
     /// - Parameters:
     ///   - data: ByteBuffer containing the data to write
     ///   - offset: Position in file to start writing (defaults to 0)
+    ///   - progress: Optional closure called with the total number of bytes written after each chunk is written.
     /// - Throws: SFTPError if the file handle is invalid or write fails
     ///
     /// ## Example
@@ -180,8 +187,10 @@ public final class SFTPFile {
     ///     filePath: "test.txt",
     ///     flags: [.write, .create]
     /// ) { file in
-    ///     // Write string data
-    ///     try await file.write(ByteBuffer(string: "Hello World\n"))
+    ///     // Write string data with progress reporting
+    ///     try await file.write(ByteBuffer(string: "Hello World\n"), progress: { bytesUploaded in
+    ///         print("Uploaded \(bytesUploaded) bytes")
+    ///     })
     /// 
     ///     // Append more data
     ///     let moreData = ByteBuffer(string: "More content")
@@ -194,11 +203,12 @@ public final class SFTPFile {
     ///     try await file.write(chunk2, at: UInt64(chunk1.readableBytes))
     /// }
     /// ```
-    public func write(_ data: ByteBuffer, at offset: UInt64 = 0) async throws -> Void {
+    public func write(_ data: ByteBuffer, at offset: UInt64 = 0, progress: ((Int) -> Void)? = nil) async throws -> Void {
         guard self.isActive else { throw SFTPError.fileHandleInvalid }
         
         var data = data
         let sliceLength = 32_000 // https://github.com/apple/swift-nio-ssh/issues/99
+        var writtenBytes = 0
         
         while data.readableBytes > 0, let slice = data.readSlice(length: Swift.min(sliceLength, data.readableBytes)) {
             let result = try await self.client.sendRequest(.write(.init(
@@ -213,6 +223,9 @@ public final class SFTPFile {
             guard status.errorCode == .ok else {
                 throw SFTPError.errorStatus(status)
             }
+            
+            writtenBytes += slice.readableBytes
+            progress?(writtenBytes)
             
             self.logger.debug("SFTP wrote \(slice.readableBytes) @ \(Int(offset) + data.readerIndex - slice.readableBytes) to file \(self.handle.sftpHandleDebugDescription)")
         }
@@ -260,3 +273,4 @@ extension ByteBuffer {
         return self.readableBytesView.flatMap { [Int($0 >> 8), Int($0 & 0x0f)] }.map { ["0","1","2","3","4","5","6","7","8","9","a","b","c","d","e","f"][$0] }.joined()
     }
 }
+
