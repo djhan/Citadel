@@ -97,9 +97,6 @@ public final class SFTPClient: Sendable {
             self.logger.trace("SFTP OUT: \(message.debugDescription)")
             //logger.trace("SFTP OUT: \(message.debugRawBytesRepresentation)")
 
-            self.channel.pipeline.addHandler(ProgressTrackingHandler({ progressed in
-                self.logger.debug("\(#function) :: 진행상태 = \(progressed)")
-            }))
             return self.channel.writeAndFlush(request.makeMessage()).flatMap {
                 promise.futureResult
             }
