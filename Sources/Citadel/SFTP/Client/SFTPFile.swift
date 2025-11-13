@@ -1,3 +1,4 @@
+import Foundation
 import NIO
 import Logging
 
@@ -297,6 +298,39 @@ public final class SFTPFile {
         }
         
         self.logger.debug("SFTP closed file \(self.handle.sftpHandleDebugDescription)")
+    }
+    
+    /// Upload a local file to the open SFTP file in chunks, with optional progress reporting.
+    ///
+    /// - Parameters:
+    ///   - localPath: The file path on the local file system to read from.
+    ///   - chunkSize: The max size for each chunk to read/write (default: 32_768).
+    ///   - progress: Optional closure called with the total bytes uploaded after each chunk.
+    /// - Throws: SFTPError or any Foundation file I/O error.
+    ///
+    /// ## Example
+    /// ```swift
+    /// try await file.uploadLocalFile(fromPath: "/tmp/large.iso") { bytesUploaded in
+    ///     print("Uploaded \(bytesUploaded) bytes")
+    /// }
+    /// ```
+    //@available(macOS 10.15, *)
+    public func uploadLocalFile(fromPath localPath: String, chunkSize: Int = 32_768, progress: ((Int) -> Void)? = nil) async throws {
+        let fileHandle = try FileHandle(forReadingFrom: URL(fileURLWithPath: localPath))
+        defer { try? fileHandle.close() }
+        var offset: UInt64 = 0
+        var bytesUploaded = 0
+        
+        while true {
+            let data = try fileHandle.read(upToCount: chunkSize) ?? Data()
+            if data.isEmpty { break }
+            
+            let buffer = ByteBuffer(bytes: data)
+            try await self.write(buffer, at: offset)
+            offset += UInt64(buffer.readableBytes)
+            bytesUploaded += buffer.readableBytes
+            progress?(bytesUploaded)
+        }
     }
 }
 
