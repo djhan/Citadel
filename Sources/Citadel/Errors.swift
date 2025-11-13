@@ -24,6 +24,7 @@ public enum SFTPError: Error {
     case fileHandleInvalid
     case errorStatus(SFTPMessage.Status)
     case unsupportedVersion(SFTPProtocolVersion)
+    case aborted
 }
 
 public enum CitadelError: Error {
