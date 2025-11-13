@@ -220,7 +220,17 @@ public final class SFTPFile {
         
         return buffer
     }
-    
+    /// Write data to the file at the specified offset.
+    ///
+    /// - Parameters:
+    ///   - data: Data
+    ///   - offset: Position in file to start writing (defaults to 0)
+    ///   - progress: Optional closure called with the total number of bytes written after each chunk is written.
+    /// - Throws: SFTPError if the file handle is invalid or write fails
+    ///
+    public func write(_ data: Data, at offset: UInt64 = 0, progress: ((Int) -> Void)? = nil) async throws -> Void {
+        try await self.write(ByteBuffer(data: data), at: offset, progress: progress)
+    }
     /// Write data to the file at the specified offset.
     ///
     /// - Parameters:
