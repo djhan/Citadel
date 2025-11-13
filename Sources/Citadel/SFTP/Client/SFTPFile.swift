@@ -147,10 +147,9 @@ public final class SFTPFile {
         do {
             if var readableBytes = attributes.size {
                 while readableBytes > 0 {
-                    guard Task.isCancelled == false else {
-                        self.logger.debug("Cancelled read operation on file \(self.handle.sftpHandleDebugDescription)")
-                        throw SFTPError.aborted
-                    }
+                    // 취소 여부 확인
+                    try Task.checkCancellation()
+                    
                     let consumed = Swift.min(readableBytes, UInt64(UInt32.max))
                     
                     var data = try await self.read(
@@ -204,10 +203,8 @@ public final class SFTPFile {
         var totalBytesRead = 0
         
         while UInt64(totalBytesRead) < length {
-            guard Task.isCancelled == false else {
-                self.logger.debug("Cancelled read operation on file \(self.handle.sftpHandleDebugDescription)")
-                throw SFTPError.aborted
-            }
+            // 취소 여부 확인
+            try Task.checkCancellation()
 
             let bytesToRead = UInt32(min(UInt64(chunkSize), length - UInt64(totalBytesRead)))
             let chunk = try await self.read(from: offset + UInt64(totalBytesRead), length: bytesToRead)
@@ -262,10 +259,9 @@ public final class SFTPFile {
         var writtenBytes = 0
         
         while data.readableBytes > 0, let slice = data.readSlice(length: Swift.min(sliceLength, data.readableBytes)) {
-            guard Task.isCancelled == false else {
-                self.logger.debug("Cancelled write operation on file \(self.handle.sftpHandleDebugDescription)")
-                throw SFTPError.aborted
-            }
+            // 취소 여부 확인
+            try Task.checkCancellation()
+
             let result = try await self.client.sendRequest(.write(.init(
                 requestId: self.client.allocateRequestId(),
                 handle: self.handle, offset: offset + UInt64(data.readerIndex) - UInt64(slice.readableBytes), data: slice
@@ -335,10 +331,9 @@ public final class SFTPFile {
         var bytesUploaded = 0
         
         while true {
-            guard Task.isCancelled == false else {
-                self.logger.debug("Cancelled write operation on file \(self.handle.sftpHandleDebugDescription)")
-                throw SFTPError.aborted
-            }
+            // 취소 여부 확인
+            try Task.checkCancellation()
+
             let data = try fileHandle.read(upToCount: chunkSize) ?? Data()
             if data.isEmpty { break }
             
