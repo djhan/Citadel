@@ -442,8 +442,10 @@ extension OpenSSH.KDF {
         case .bcrypt:
             guard
                 let salt = options.readSSHBuffer(),
-                let rounds: UInt32 = options.readInteger(),
-                rounds < 32
+                /// - Important:
+                /// 해쉬 횟수를 체크하는 로직을 제거. 현대적인 OS에서는 100회 이상 해쉬를 적용하기도 하므로 문제의 여지가 있음.
+                let rounds: UInt32 = options.readInteger()//,
+                //rounds < 32
             else {
                 throw InvalidOpenSSHKey.invalidOrUnsupportedBCryptConfig
             }
