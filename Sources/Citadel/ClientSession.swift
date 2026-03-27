@@ -2,7 +2,6 @@ import NIO
 @preconcurrency import NIOSSH
 import Logging
 import NIOConcurrencyHelpers
-import Synchronization
 
 final class SSHClientInboundChannelHandler: Sendable {
     typealias TCPIPForwardHandler = @Sendable (Channel, SSHChannelType.ForwardedTCPIP) -> EventLoopFuture<Void>
