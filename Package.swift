@@ -24,7 +24,12 @@ let package = Package(
         .package(url: "https://github.com/mtynior/ColorizeSwift.git", from: "1.5.0"),
     ],
     targets: [
-        .target(name: "CCitadelBcrypt"),
+        .target(
+            name: "CCitadelBcrypt",
+            cSettings: [
+                .unsafeFlags(["-w"])
+            ]
+        ),
         .target(
             name: "Citadel",
             dependencies: [
@@ -34,6 +39,9 @@ let package = Package(
                 .product(name: "_CryptoExtras", package: "swift-crypto"),
                 .product(name: "BigInt", package: "BigInt"),
                 .product(name: "Logging", package: "swift-log"),
+            ],
+            swiftSettings: [
+                .unsafeFlags(["-suppress-warnings"])
             ]
         ),
         .executableTarget(
