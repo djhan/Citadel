@@ -17,7 +17,11 @@ let package = Package(
     ],
     dependencies: [
         // .package(path: "/Users/joannisorlandos/git/joannis/swift-nio-ssh"),
-        .package(url: "https://github.com/Wellz26/swift-nio-ssh.git", "0.3.4" ..< "0.4.0"),
+        // EdgeView 패치: ChildChannelStateMachine.sendChannelWindowAdjust가 채널이 막 닫힌
+        // 직후 도착하는 인바운드 읽기(window adjust 자동 생성)와의 레이스로 preconditionFailure
+        // 크래쉬를 내던 문제를 고친 포크. Wellz26/swift-nio-ssh의 citadel2 브랜치(0.3.6, 커밋
+        // a05e6bb) 위에 패치 한 개만 얹었다.
+        .package(url: "https://github.com/djhan/swift-nio-ssh.git", revision: "a4b54fd32ee612bacf19a956c2046ec65bb3a542"),
         .package(url: "https://github.com/apple/swift-nio.git", from: "2.81.0"),
         .package(url: "https://github.com/apple/swift-log.git", from: "1.0.0"),
         .package(url: "https://github.com/attaswift/BigInt.git", from: "5.2.0"),
