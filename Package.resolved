@@ -77,7 +77,7 @@
       "kind" : "remoteSourceControl",
       "location" : "https://github.com/djhan/swift-nio-ssh.git",
       "state" : {
-        "revision" : "a4b54fd32ee612bacf19a956c2046ec65bb3a542"
+        "revision" : "5532d69b96ae35d31f4f90a446613e1d33e3f830"
       }
     },
     {
