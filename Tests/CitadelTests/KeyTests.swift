@@ -329,4 +329,139 @@ final class KeyTests: XCTestCase {
         let ecdsa521KeyType = try SSHKeyDetection.detectPrivateKeyType(from: ecdsa521PrivateKey)
         XCTAssertEqual(ecdsa521KeyType, .ecdsaP521)
     }
+
+    // MARK: - ECDSA (OpenSSH 포맷)
+    // 픽스처는 이 테스트 전용 일회용 키다(`ssh-keygen -t ecdsa`, 2026/10/12 생성, 어떤 서버에도 등록되지 않음). 암호화 키의 passphrase는 `testpass`.
+
+    /// `.pub` 한 줄(`ecdsa-sha2-… <base64> comment`)에서 공개 점 Q를 꺼낸다.
+    private func publicPoint(fromAuthorizedKey line: String) throws -> Data {
+        let fields = line.split(separator: " ")
+        var buffer = ByteBuffer(data: try XCTUnwrap(Data(base64Encoded: String(fields[1]))))
+        func readString() throws -> Data {
+            let length = try XCTUnwrap(buffer.readInteger(as: UInt32.self))
+            return Data(try XCTUnwrap(buffer.readBytes(length: Int(length))))
+        }
+        _ = try readString() // key type
+        _ = try readString() // curve
+        return try readString()
+    }
+
+    func testECDSAPrivateKeys() throws {
+        let passphrase = "testpass".data(using: .utf8)!
+
+        let p256 = try P256.Signing.PrivateKey(sshECDSA: ECDSAKeyFixtures.ecdsaP256PlainKey)
+        XCTAssertEqual(p256.publicKey.x963Representation, try publicPoint(fromAuthorizedKey: ECDSAKeyFixtures.ecdsaP256PlainPublicKey))
+        let p384 = try P384.Signing.PrivateKey(sshECDSA: ECDSAKeyFixtures.ecdsaP384PlainKey)
+        XCTAssertEqual(p384.publicKey.x963Representation, try publicPoint(fromAuthorizedKey: ECDSAKeyFixtures.ecdsaP384PlainPublicKey))
+        let p521 = try P521.Signing.PrivateKey(sshECDSA: ECDSAKeyFixtures.ecdsaP521PlainKey)
+        XCTAssertEqual(p521.publicKey.x963Representation, try publicPoint(fromAuthorizedKey: ECDSAKeyFixtures.ecdsaP521PlainPublicKey))
+
+        let encryptedP256 = try P256.Signing.PrivateKey(sshECDSA: ECDSAKeyFixtures.ecdsaP256EncryptedKey, decryptionKey: passphrase)
+        XCTAssertEqual(encryptedP256.publicKey.x963Representation, try publicPoint(fromAuthorizedKey: ECDSAKeyFixtures.ecdsaP256EncryptedPublicKey))
+        let encryptedP384 = try P384.Signing.PrivateKey(sshECDSA: ECDSAKeyFixtures.ecdsaP384EncryptedKey, decryptionKey: passphrase)
+        XCTAssertEqual(encryptedP384.publicKey.x963Representation, try publicPoint(fromAuthorizedKey: ECDSAKeyFixtures.ecdsaP384EncryptedPublicKey))
+        let encryptedP521 = try P521.Signing.PrivateKey(sshECDSA: ECDSAKeyFixtures.ecdsaP521EncryptedKey, decryptionKey: passphrase)
+        XCTAssertEqual(encryptedP521.publicKey.x963Representation, try publicPoint(fromAuthorizedKey: ECDSAKeyFixtures.ecdsaP521EncryptedPublicKey))
+    }
+
+    func testEncryptedECDSAPrivateKeyErrors() throws {
+        // passphrase 없음 → missingDecryptionKey (`OpenSSH.KeyError`는 internal이라 설명 문자열로 확인)
+        XCTAssertThrowsError(try P256.Signing.PrivateKey(sshECDSA: ECDSAKeyFixtures.ecdsaP256EncryptedKey)) { error in
+            XCTAssertTrue(String(describing: error).contains("missingDecryptionKey"), "\(error)")
+        }
+        // 틀린 passphrase → invalidCheck (`InvalidOpenSSHKey`의 정적 값은 internal이라 설명 문자열로 확인)
+        XCTAssertThrowsError(try P256.Signing.PrivateKey(sshECDSA: ECDSAKeyFixtures.ecdsaP256EncryptedKey,
+                                                         decryptionKey: "wrong".data(using: .utf8)!)) { error in
+            XCTAssertTrue(error is InvalidOpenSSHKey && String(describing: error).contains("invalidCheck"), "\(error)")
+        }
+    }
+
+    func testECDSAPrivateKeyWithWrongCurveFails() {
+        XCTAssertThrowsError(try P384.Signing.PrivateKey(sshECDSA: ECDSAKeyFixtures.ecdsaP256PlainKey))
+        XCTAssertThrowsError(try P256.Signing.PrivateKey(sshECDSA: ECDSAKeyFixtures.ecdsaP521PlainKey))
+    }
+}
+
+/// ECDSA 테스트 전용 일회용 키(`ssh-keygen -t ecdsa`, 2026/10/12 생성). 실제 서버 접속에 쓰지 않는다.
+private enum ECDSAKeyFixtures {
+    static let ecdsaP256PlainKey = """
+        -----BEGIN OPENSSH PRIVATE KEY-----
+        b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAaAAAABNlY2RzYS
+        1zaGEyLW5pc3RwMjU2AAAACG5pc3RwMjU2AAAAQQQKKn5A24feK/C8ZZ4xA8NsaeElroqg
+        k5z4cvQW9QZqatFG+FX250SOfuxei7v25LXD63otQkBvlvNrmvf/gEm/AAAAoAbFY74GxW
+        O+AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBAoqfkDbh94r8Lxl
+        njEDw2xp4SWuiqCTnPhy9Bb1Bmpq0Ub4VfbnRI5+7F6Lu/bktcPrei1CQG+W82ua9/+ASb
+        8AAAAhANQs92V+fHXV/xKD67i3fW2o0S0phH3TXLHyWltuNULCAAAABHRlc3QBAgM=
+        -----END OPENSSH PRIVATE KEY-----
+        """
+    static let ecdsaP256PlainPublicKey = "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBAoqfkDbh94r8LxlnjEDw2xp4SWuiqCTnPhy9Bb1Bmpq0Ub4VfbnRI5+7F6Lu/bktcPrei1CQG+W82ua9/+ASb8= test"
+    static let ecdsaP256EncryptedKey = """
+        -----BEGIN OPENSSH PRIVATE KEY-----
+        b3BlbnNzaC1rZXktdjEAAAAACmFlczI1Ni1jdHIAAAAGYmNyeXB0AAAAGAAAABC1BSVhLs
+        evq7M0BCmyJ2CqAAAAGAAAAAEAAABoAAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlz
+        dHAyNTYAAABBBGgXAJC0utXW/Yj09pjHwNo5bKoGy53D69U/1hEt4DXn+ttLV09BNjkXZG
+        TDTLOOrtH13Lsg2Ya8DpVO4JT8Ut8AAACgYavn2NNi5gJQ3GHaAoZwalvClrFH/YwvehUK
+        jIASitKx16MvMa+i74aB4uQb/7rkve9Pa89/f6m0LtHj2U8+rolu5yPhIHOT7IHPRL02mK
+        SO6OR9a6xdN9KJNLVu4uZKXq/HBk0OgbrOQycbLJjRRSwUQvRIoXx0xJF9dXe29KDAbu0l
+        BZR+IvUfLb5X9K/6of3NYCDnKUv7mhFqN82OoQ==
+        -----END OPENSSH PRIVATE KEY-----
+        """
+    static let ecdsaP256EncryptedPublicKey = "ecdsa-sha2-nistp256 AAAAE2VjZHNhLXNoYTItbmlzdHAyNTYAAAAIbmlzdHAyNTYAAABBBGgXAJC0utXW/Yj09pjHwNo5bKoGy53D69U/1hEt4DXn+ttLV09BNjkXZGTDTLOOrtH13Lsg2Ya8DpVO4JT8Ut8= test"
+    static let ecdsaP384PlainKey = """
+        -----BEGIN OPENSSH PRIVATE KEY-----
+        b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAiAAAABNlY2RzYS
+        1zaGEyLW5pc3RwMzg0AAAACG5pc3RwMzg0AAAAYQQ0jnmKziMvxZNJE1feJX8GV8DCOORY
+        /RGRIxTQGwbDQzR4l7EyLLuXcdwmqL0s7MpwkLOfSbohNU1rPw11HZmebluHzhTEGUsZPU
+        zvFogoV4KEw/biMwr983s2Tx0qz9sAAADQN4jgBTeI4AUAAAATZWNkc2Etc2hhMi1uaXN0
+        cDM4NAAAAAhuaXN0cDM4NAAAAGEENI55is4jL8WTSRNX3iV/BlfAwjjkWP0RkSMU0BsGw0
+        M0eJexMiy7l3HcJqi9LOzKcJCzn0m6ITVNaz8NdR2Znm5bh84UxBlLGT1M7xaIKFeChMP2
+        4jMK/fN7Nk8dKs/bAAAAMQDffAbc3njDD54xYkhGjM94W9ceEc+k79uyaJq9h+W04zSN2c
+        1u07Eq9/pXACw/H0MAAAAEdGVzdAECAw==
+        -----END OPENSSH PRIVATE KEY-----
+        """
+    static let ecdsaP384PlainPublicKey = "ecdsa-sha2-nistp384 AAAAE2VjZHNhLXNoYTItbmlzdHAzODQAAAAIbmlzdHAzODQAAABhBDSOeYrOIy/Fk0kTV94lfwZXwMI45Fj9EZEjFNAbBsNDNHiXsTIsu5dx3CaovSzsynCQs59JuiE1TWs/DXUdmZ5uW4fOFMQZSxk9TO8WiChXgoTD9uIzCv3zezZPHSrP2w== test"
+    static let ecdsaP384EncryptedKey = """
+        -----BEGIN OPENSSH PRIVATE KEY-----
+        b3BlbnNzaC1rZXktdjEAAAAACmFlczI1Ni1jdHIAAAAGYmNyeXB0AAAAGAAAABARLHbiBX
+        fAxlffiv6KO2qRAAAAGAAAAAEAAACIAAAAE2VjZHNhLXNoYTItbmlzdHAzODQAAAAIbmlz
+        dHAzODQAAABhBEHDeJcw+iOgecKAjoKYD9CZIEk9t1CXwytUzvsBJRU2LpXpvjyx93ONxq
+        cyrkpsyktk+4dvIM9yg24eZEwQnyqudONRrsBMgpk+ARGhqWU5i8fFw49ZPNY0kAoupsc8
+        7QAAANCXhaZi2pSI6DvRDJJoSF0kEJkk3gOQvlPtVOSbvmcnJ/t8gX0+Dh5fuBkW6i69Hl
+        L14eX6uXsYoCmL0kC/9hpHbD5XdZSm+djHm+kvwjEUKTD3C8/25WXeCus+QjPeAqeO29jS
+        DMNwEC+DF8wUKaSZUM8XTWLszlzIay0ixcCewISNkPtlOMMwq3H8QT/mA5T6mpCHbH89hy
+        Yl3SIzAjgsZkrDVHc2RtReFT1BbaHt8AHiJ0JraqCup1S+XFrXLoPOuXs4xgGkeczutmL9
+        7uEx
+        -----END OPENSSH PRIVATE KEY-----
+        """
+    static let ecdsaP384EncryptedPublicKey = "ecdsa-sha2-nistp384 AAAAE2VjZHNhLXNoYTItbmlzdHAzODQAAAAIbmlzdHAzODQAAABhBEHDeJcw+iOgecKAjoKYD9CZIEk9t1CXwytUzvsBJRU2LpXpvjyx93ONxqcyrkpsyktk+4dvIM9yg24eZEwQnyqudONRrsBMgpk+ARGhqWU5i8fFw49ZPNY0kAoupsc87Q== test"
+    static let ecdsaP521PlainKey = """
+        -----BEGIN OPENSSH PRIVATE KEY-----
+        b3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAArAAAABNlY2RzYS
+        1zaGEyLW5pc3RwNTIxAAAACG5pc3RwNTIxAAAAhQQBHV5YR1VKPBifqg40YijQXMko0xl5
+        HvOeZakCtS+dsNysbxUc1dLjEzjbiAta4SbFcVVvqu/AQ3Y74iIn2ASJTXoBqMD2oZgMdd
+        u1/eL+Vuuo+mnRG0PHpnscuM+mAr6Lj39nw7Ohbb3gQfkd8JbdM2i5lE7Bz3zjwuiAv1Ud
+        akGijqsAAAEIIOwGEiDsBhIAAAATZWNkc2Etc2hhMi1uaXN0cDUyMQAAAAhuaXN0cDUyMQ
+        AAAIUEAR1eWEdVSjwYn6oONGIo0FzJKNMZeR7znmWpArUvnbDcrG8VHNXS4xM424gLWuEm
+        xXFVb6rvwEN2O+IiJ9gEiU16AajA9qGYDHXbtf3i/lbrqPpp0RtDx6Z7HLjPpgK+i49/Z8
+        OzoW294EH5HfCW3TNouZROwc9848LogL9VHWpBoo6rAAAAQgF/3PJqk9WfqBJfasxvIB+v
+        +65+e0C7KqwAGv16ec5mERxpASsXpP4ANuyZAoara/gWgVKTFMzgSWjnD7Vi3hwe1gAAAA
+        R0ZXN0AQIDBAUG
+        -----END OPENSSH PRIVATE KEY-----
+        """
+    static let ecdsaP521PlainPublicKey = "ecdsa-sha2-nistp521 AAAAE2VjZHNhLXNoYTItbmlzdHA1MjEAAAAIbmlzdHA1MjEAAACFBAEdXlhHVUo8GJ+qDjRiKNBcySjTGXke855lqQK1L52w3KxvFRzV0uMTONuIC1rhJsVxVW+q78BDdjviIifYBIlNegGowPahmAx127X94v5W66j6adEbQ8emexy4z6YCvouPf2fDs6FtveBB+R3wlt0zaLmUTsHPfOPC6IC/VR1qQaKOqw== test"
+    static let ecdsaP521EncryptedKey = """
+        -----BEGIN OPENSSH PRIVATE KEY-----
+        b3BlbnNzaC1rZXktdjEAAAAACmFlczI1Ni1jdHIAAAAGYmNyeXB0AAAAGAAAABCK+1K2B8
+        uvtpaYGyTd0+aYAAAAGAAAAAEAAACsAAAAE2VjZHNhLXNoYTItbmlzdHA1MjEAAAAIbmlz
+        dHA1MjEAAACFBADIMQSOk43H4Zs/xCuMB/Iv8QodEodVbEPLspEO3J8S26Y0oVTFPM8Fj0
+        1aEl1c6sRtRZ9E+fwyN8hV+EAyOLM6lQBckw54AahdpA4kI9ig4mr38cN/S3mGTxv7fDmT
+        ulB58eUnSlnoFkipmJYLMQogGf24etsCmnRQp2gC9lK0HYJimAAAARAXUK08Wk+BnryK0g
+        fLhNX7CCJRX2G463aslwPT/nk8xM+a2t0ujOzMI4BtPTdzIlDc+lcWz/YVTg0ImAbsSNY7
+        dji1y6yhvQg9j+v2wtBncvYe8zufhMgWrw7Ze3jCdAAJoo9FxD7fWWK1NUiUAB0LvA/186
+        +zmX5pDaQFefRTdHA4Uy/gkckE2DkdfILApjBLstXEumG217Kjd1WKGMCd2EMDI04v+YBZ
+        qOxRfLdMJ4cgbC345LktONKNf1sPMxJsz0WkmdfEFn6ytDwarOq9grK+cmeNrHLDTMsGzh
+        EqAkXXs9c3c45/ruw8IX1IZVV+TaIwiGxyCU0ouNEGJuuMVdl6zWN9EPjlADKXTaAnKA==
+        -----END OPENSSH PRIVATE KEY-----
+        """
+    static let ecdsaP521EncryptedPublicKey = "ecdsa-sha2-nistp521 AAAAE2VjZHNhLXNoYTItbmlzdHA1MjEAAAAIbmlzdHA1MjEAAACFBADIMQSOk43H4Zs/xCuMB/Iv8QodEodVbEPLspEO3J8S26Y0oVTFPM8Fj01aEl1c6sRtRZ9E+fwyN8hV+EAyOLM6lQBckw54AahdpA4kI9ig4mr38cN/S3mGTxv7fDmTulB58eUnSlnoFkipmJYLMQogGf24etsCmnRQp2gC9lK0HYJimA== test"
 }
